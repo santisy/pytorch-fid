@@ -32,13 +32,16 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+from __future__ import print_function
 import os
-import pathlib
+# import pathlib
+import glob
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
 import torch
 import numpy as np
 from scipy.misc import imread
+from scipy.misc import imresize
 from scipy import linalg
 from torch.autograd import Variable
 from torch.nn.functional import adaptive_avg_pool2d
@@ -255,3 +258,89 @@ if __name__ == '__main__':
                                           args.gpu != '',
                                           args.dims)
     print('FID: ', fid_value)
+
+######### MAIN function will be called from this repository #########
+""" Before call"""
+def fid_scores(output_folder, cfg, sample_num, batch_size=16, cuda=True):
+    ####### The model
+    block_idx = InceptionV3.BLOCK_INDEX_BY_DIM[2048]
+
+    model = InceptionV3([block_idx])
+    if cuda:
+        model.cuda()
+
+    gen_images_path = os.path.join(output_folder, 'eval/Image')
+    train_images_path = os.path.join(cfg.DATA_DIR, 'train')
+
+    ################### Loading and processing generated images ###############
+    assert os.path.isdir(gen_images_path)
+
+    gen_images_list = glob.glob(os.path.join(gen_images_path, '*.jpg')) + \
+            glob.glob(os.path.join(gen_images_path, '*.png'))
+
+    gen_array_list = []
+    print("Loading generated images")
+    for img_path in gen_images_list:
+        strip_image = imread(str(img_path))
+        for i in range(sample_num):
+            gen_array_list.append(strip_image[2:(cfg.IMSIZE+2), 
+                i*(cfg.IMSIZE*cfg.IM_RATIO+2)+2:(i+1)*(cfg.IMSIZE*cfg.IM_RATIO+2),
+                :])
+
+    gen_imgs = np.array(gen_array_list)
+
+    gen_imgs = gen_imgs.transpose((0, 3, 1, 2))
+    # Rescale images to be between 0 and 1
+    gen_imgs /= 255
+
+    print("Calculating the statistics in generated images")
+    gen_mean, gen_sigma_matrix =\
+            calculate_activation_statistics(gen_imgs, model, batch_size=batch_size,
+                                           dims=2048, cuda=cuda)
+
+    #################### Loading and processing training images ##############
+    if cfg.DATASET_NAME != 'cityscapes':
+        train_images_list = glob.glob(os.path.join(train_images_path, '*.jpg')) + \
+                glob.glob(os.path.join(train_images_path, '*.png'))
+    else:
+        train_images_list = \
+                glob.glob(os.path.join(train_images_path, '*leftImg8bit.png'))
+
+
+    if cfg.DATASET_NAME == 'shoes' or cfg.DATASET_NAME == 'facades':
+        img_size = 256
+    elif cfg.DATASET_NAME == 'maps':
+        img_size = 512
+
+    if cfg.DATASET_NAME == 'shoes': offset = 1;
+    else: offset = 0;
+
+    print("Loading training images")
+    if cfg.DATASET_NAME != 'cityscapes':
+        train_imgs = \
+            np.array([
+                imresize(imread(str(fn))[:, img_size*offset:img_size*(offset+1), :],
+                    [cfg.IMSIZE, cfg.IMSIZE * cfg.IM_RATIO],
+                    interp='bilinear').astype(np.float32) for fn in train_images_list])
+    else:
+        train_imgs = \
+            np.array([
+                imresize(imread(str(fn)),
+                    [cfg.IMSIZE, cfg.IMSIZE * cfg.IM_RATIO],
+                    interp='bilinear').astype(np.float32) for fn in train_images_list])
+
+
+    train_imgs = train_imgs.transpose((0, 3, 1, 2))
+    # Rescale images to be between 0 and 1
+    train_imgs /= 255
+    print("Calculating the statistics in training set")
+    train_mean, train_sigma_matrix =\
+            calculate_activation_statistics(train_imgs, model, batch_size=batch_size,
+                                           dims=2048, cuda=cuda)
+    
+
+    print("Calcualting the FID score")
+    fid_value = calculate_frechet_distance(train_mean, train_sigma_matrix, 
+            gen_mean, gen_sigma_matrix)
+
+    print("FID score: of experiment %s: \n %.4f" % (output_folder, fid_value))
