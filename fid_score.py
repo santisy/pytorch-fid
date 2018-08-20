@@ -35,6 +35,7 @@ limitations under the License.
 from __future__ import print_function
 import os
 # import pathlib
+import datetime
 import glob
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
@@ -261,7 +262,7 @@ if __name__ == '__main__':
 
 ######### MAIN function will be called from this repository #########
 """ Before call"""
-def fid_scores(output_folder, cfg, sample_num, batch_size=16, cuda=True):
+def fid_scores(output_folder, cfg, sample_num, batch_size=10, cuda=True):
     ####### The model
     block_idx = InceptionV3.BLOCK_INDEX_BY_DIM[2048]
 
@@ -275,8 +276,8 @@ def fid_scores(output_folder, cfg, sample_num, batch_size=16, cuda=True):
     ################### Loading and processing generated images ###############
     assert os.path.isdir(gen_images_path)
 
-    gen_images_list = glob.glob(os.path.join(gen_images_path, '*.jpg')) + \
-            glob.glob(os.path.join(gen_images_path, '*.png'))
+    gen_images_list = glob.glob(os.path.join(gen_images_path, 'gen_*.jpg')) + \
+            glob.glob(os.path.join(gen_images_path, 'gen_*.png'))
 
     gen_array_list = []
     print("Loading generated images")
@@ -285,7 +286,7 @@ def fid_scores(output_folder, cfg, sample_num, batch_size=16, cuda=True):
         for i in range(sample_num):
             gen_array_list.append(strip_image[2:(cfg.IMSIZE+2), 
                 i*(cfg.IMSIZE*cfg.IM_RATIO+2)+2:(i+1)*(cfg.IMSIZE*cfg.IM_RATIO+2),
-                :])
+                :].astype(np.float32))
 
     gen_imgs = np.array(gen_array_list)
 
@@ -347,4 +348,4 @@ def fid_scores(output_folder, cfg, sample_num, batch_size=16, cuda=True):
 
     with open(os.path.join(output_folder, 'fid_scores.txt'), 'a') as f:
         date_str = datetime.datetime.now().strftime('%b-%d-%I%M%p-%G')
-        f.wirte('%s, fid_score: %.4f' % (date_str, fid_value))
+        f.write('%s, fid_score: %.4f\n' % (date_str, fid_value))
