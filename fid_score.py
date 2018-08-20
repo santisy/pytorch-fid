@@ -344,3 +344,7 @@ def fid_scores(output_folder, cfg, sample_num, batch_size=16, cuda=True):
             gen_mean, gen_sigma_matrix)
 
     print("FID score: of experiment %s: \n %.4f" % (output_folder, fid_value))
+
+    with open(os.path.join(output_folder, 'fid_scores.txt'), 'a') as f:
+        date_str = datetime.datetime.now().strftime('%b-%d-%I%M%p-%G')
+        f.wirte('%s, fid_score: %.4f' % (date_str, fid_value))
