@@ -262,7 +262,8 @@ if __name__ == '__main__':
 
 ######### MAIN function will be called from this repository #########
 """ Before call"""
-def fid_scores(output_folder, cfg, sample_num, batch_size=10, cuda=True):
+def fid_scores(output_folder, cfg, sample_num, batch_size=10, cuda=True, 
+        gen_images_path=''):
     ####### The model
     block_idx = InceptionV3.BLOCK_INDEX_BY_DIM[2048]
 
@@ -270,23 +271,37 @@ def fid_scores(output_folder, cfg, sample_num, batch_size=10, cuda=True):
     if cuda:
         model.cuda()
 
-    gen_images_path = os.path.join(output_folder, 'eval/Image')
+    if gen_images_path == '': #### allow the customize input data_path
+        gen_images_path = os.path.join(output_folder, 'eval/Image')
+    else:
+        gen_images_path = gen_images_path
+
     train_images_path = os.path.join(cfg.DATA_DIR, 'train')
 
     ################### Loading and processing generated images ###############
     assert os.path.isdir(gen_images_path)
 
     gen_images_list = glob.glob(os.path.join(gen_images_path, 'gen_*.jpg')) + \
-            glob.glob(os.path.join(gen_images_path, 'gen_*.png'))
+            glob.glob(os.path.join(gen_images_path, 'gen_*.png')) + \
+            glob.glob(os.path.join(gen_images_path, '*sample*.jpg'))
 
     gen_array_list = []
     print("Loading generated images")
     for img_path in gen_images_list:
-        strip_image = imread(str(img_path))
-        for i in range(sample_num):
-            gen_array_list.append(strip_image[2:(cfg.IMSIZE+2), 
-                i*(cfg.IMSIZE*cfg.IM_RATIO+2)+2:(i+1)*(cfg.IMSIZE*cfg.IM_RATIO+2),
-                :].astype(np.float32))
+        if img_path.find('sample') != -1:
+            gen_img = imread(str(img_path))
+            if gen_img.shape[2] != cfg.IMSIZE:
+                gen_img = imresize(gen_img, 
+                        [cfg.IMSIZE, cfg.IMSIZE * cfg.IM_RATIO], 
+                        interp='bilinear').astype(np.float32)
+            gen_array_list.append(gen_img)
+
+        else:
+            strip_image = imread(str(img_path))
+            for i in range(sample_num):
+                gen_array_list.append(strip_image[2:(cfg.IMSIZE+2), 
+                    i*(cfg.IMSIZE*cfg.IM_RATIO+2)+2:(i+1)*(cfg.IMSIZE*cfg.IM_RATIO+2),
+                    :].astype(np.float32))
 
     gen_imgs = np.array(gen_array_list)
 
