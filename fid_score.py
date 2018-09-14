@@ -263,7 +263,7 @@ if __name__ == '__main__':
 ######### MAIN function will be called from this repository #########
 """ Before call"""
 def fid_scores(output_folder, cfg, sample_num, batch_size=10, cuda=True, 
-        gen_images_path=''):
+        gen_images_path='', loop=False):
     ####### The model
     block_idx = InceptionV3.BLOCK_INDEX_BY_DIM[2048]
 
@@ -286,7 +286,7 @@ def fid_scores(output_folder, cfg, sample_num, batch_size=10, cuda=True,
             glob.glob(os.path.join(gen_images_path, '*sample*.jpg'))
 
     gen_array_list = []
-    print("Loading generated images")
+    print("Loading generated images, total number %d" % len(gen_images_list))
     for img_path in gen_images_list:
         if img_path.find('sample') != -1:
             gen_img = imread(str(img_path))
@@ -323,37 +323,46 @@ def fid_scores(output_folder, cfg, sample_num, batch_size=10, cuda=True,
                 glob.glob(os.path.join(train_images_path, '*leftImg8bit.png'))
 
 
-    if cfg.DATASET_NAME == 'shoes' or cfg.DATASET_NAME == 'facades':
+    if cfg.DATASET_NAME == 'shoes' or cfg.DATASET_NAME == 'facades' or \
+            cfg.DATASET_NAME == 'handbags':
         img_size = 256
     elif cfg.DATASET_NAME == 'maps':
         img_size = 512
 
-    if cfg.DATASET_NAME == 'shoes': offset = 1;
+    if cfg.DATASET_NAME == 'shoes' or cfg.DATASET_NAME == 'handbags': offset = 1;
     else: offset = 0;
 
     print("Loading training images")
-    if cfg.DATASET_NAME != 'cityscapes':
-        train_imgs = \
-            np.array([
-                imresize(imread(str(fn))[:, img_size*offset:img_size*(offset+1), :],
-                    [cfg.IMSIZE, cfg.IMSIZE * cfg.IM_RATIO],
-                    interp='bilinear').astype(np.float32) for fn in train_images_list])
+    train_stat_save_path = os.path.join(cfg.DATA_DIR, 'train_set_statistics.npz')
+    if not os.path.isfile(train_stat_save_path):
+        if cfg.DATASET_NAME != 'cityscapes':
+            train_imgs = \
+                np.array([
+                    imresize(imread(str(fn))[:, img_size*offset:img_size*(offset+1), :],
+                        [cfg.IMSIZE, cfg.IMSIZE * cfg.IM_RATIO],
+                        interp='bilinear').astype(np.float32) for fn in train_images_list])
+        else:
+            train_imgs = \
+                np.array([
+                    imresize(imread(str(fn)),
+                        [cfg.IMSIZE, cfg.IMSIZE * cfg.IM_RATIO],
+                        interp='bilinear').astype(np.float32) for fn in train_images_list])
+
+
+        train_imgs = train_imgs.transpose((0, 3, 1, 2))
+        # Rescale images to be between 0 and 1
+        train_imgs /= 255
+        print("Calculating the statistics in training set")
+        train_mean, train_sigma_matrix =\
+                calculate_activation_statistics(train_imgs, model, batch_size=batch_size,
+                                               dims=2048, cuda=cuda)
+
+        np.savez_compressed(train_stat_save_path, train_mean=train_mean, 
+                train_sigma_matrix=train_sigma_matrix)
     else:
-        train_imgs = \
-            np.array([
-                imresize(imread(str(fn)),
-                    [cfg.IMSIZE, cfg.IMSIZE * cfg.IM_RATIO],
-                    interp='bilinear').astype(np.float32) for fn in train_images_list])
-
-
-    train_imgs = train_imgs.transpose((0, 3, 1, 2))
-    # Rescale images to be between 0 and 1
-    train_imgs /= 255
-    print("Calculating the statistics in training set")
-    train_mean, train_sigma_matrix =\
-            calculate_activation_statistics(train_imgs, model, batch_size=batch_size,
-                                           dims=2048, cuda=cuda)
-    
+        loaded_statistics = np.load(train_stat_save_path)
+        train_mean = loaded_statistics['train_mean']
+        train_sigma_matrix = loaded_statistics['train_sigma_matrix']
 
     print("Calcualting the FID score")
     fid_value = calculate_frechet_distance(train_mean, train_sigma_matrix, 
@@ -361,6 +370,9 @@ def fid_scores(output_folder, cfg, sample_num, batch_size=10, cuda=True,
 
     print("FID score: of experiment %s: \n %.4f" % (output_folder, fid_value))
 
-    with open(os.path.join(output_folder, 'fid_scores.txt'), 'a') as f:
-        date_str = datetime.datetime.now().strftime('%b-%d-%I%M%p-%G')
-        f.write('%s, fid_score: %.4f\n' % (date_str, fid_value))
+    if not loop:
+        with open(os.path.join(output_folder, 'fid_scores.txt'), 'a') as f:
+            date_str = datetime.datetime.now().strftime('%b-%d-%I%M%p-%G')
+            f.write('%s, fid_score: %.4f\n' % (date_str, fid_value))
+
+    return fid_value
