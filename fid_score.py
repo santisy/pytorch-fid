@@ -323,13 +323,14 @@ def fid_scores(output_folder, cfg, sample_num, batch_size=10, cuda=True,
                 glob.glob(os.path.join(train_images_path, '*leftImg8bit.png'))
 
 
-    if cfg.DATASET_NAME == 'shoes' or cfg.DATASET_NAME == 'facades' or \
-            cfg.DATASET_NAME == 'handbags':
+    if cfg.DATASET_NAME.find('shoes') != -1 \
+            or cfg.DATASET_NAME.find('handbags') != -1 or cfg.DATASET_NAME == 'facades':
         img_size = 256
     elif cfg.DATASET_NAME == 'maps':
         img_size = 512
 
-    if cfg.DATASET_NAME == 'shoes' or cfg.DATASET_NAME == 'handbags': offset = 1;
+    if cfg.DATASET_NAME.find('shoes') != -1 \
+            or cfg.DATASET_NAME.find('handbags') != -1: offset = 1;
     else: offset = 0;
 
     print("Loading training images")
