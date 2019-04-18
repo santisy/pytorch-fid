@@ -263,7 +263,7 @@ if __name__ == '__main__':
 ######### MAIN function will be called from this repository #########
 """ Before call"""
 def fid_scores(output_folder, cfg, sample_num, batch_size=10, cuda=True, 
-        gen_images_path='', loop=False):
+        gen_images_path='', train_images_path='', gen_images_list='', loop=False):
     ####### The model
     block_idx = InceptionV3.BLOCK_INDEX_BY_DIM[2048]
 
@@ -273,22 +273,24 @@ def fid_scores(output_folder, cfg, sample_num, batch_size=10, cuda=True,
 
     if gen_images_path == '': #### allow the customize input data_path
         gen_images_path = os.path.join(output_folder, 'eval/Image')
-    else:
-        gen_images_path = gen_images_path
 
-    train_images_path = os.path.join(cfg.DATA_DIR, 'train')
+    if train_images_path == '':
+        train_images_path = os.path.join(cfg.DATA_DIR, 'train')
 
     ################### Loading and processing generated images ###############
-    assert os.path.isdir(gen_images_path)
+    assert os.path.isdir(gen_images_path) or gen_images_list != ''
 
-    gen_images_list = glob.glob(os.path.join(gen_images_path, 'gen_*.jpg')) + \
-            glob.glob(os.path.join(gen_images_path, 'gen_*.png')) + \
-            glob.glob(os.path.join(gen_images_path, '*sample*.jpg'))
+    if gen_images_list == '':
+        gen_images_list = glob.glob(os.path.join(gen_images_path, 'gen_*.jpg')) + \
+                glob.glob(os.path.join(gen_images_path, 'gen_*.png')) + \
+                glob.glob(os.path.join(gen_images_path, '*sample*.jpg'))
 
     gen_array_list = []
     print("Loading generated images, total number %d" % len(gen_images_list))
     for img_path in gen_images_list:
-        if img_path.find('sample') != -1:
+        if cfg.DATASET_NAME == 'else':
+            gen_array_list.append(imread(str(img_path)))
+        elif img_path.find('sample') != -1:
             gen_img = imread(str(img_path))
             if gen_img.shape[2] != cfg.IMSIZE:
                 gen_img = imresize(gen_img, 
@@ -315,7 +317,7 @@ def fid_scores(output_folder, cfg, sample_num, batch_size=10, cuda=True,
                                            dims=2048, cuda=cuda)
 
     #################### Loading and processing training images ##############
-    if cfg.DATASET_NAME != 'cityscapes':
+    if cfg.DATASET_NAME != 'cityscapes' or cfg.DATASET_NAME == 'else':
         train_images_list = glob.glob(os.path.join(train_images_path, '*.jpg')) + \
                 glob.glob(os.path.join(train_images_path, '*.png'))
     else:
@@ -336,7 +338,11 @@ def fid_scores(output_folder, cfg, sample_num, batch_size=10, cuda=True,
     print("Loading training images")
     train_stat_save_path = os.path.join(cfg.DATA_DIR, 'train_set_statistics.npz')
     if not os.path.isfile(train_stat_save_path):
-        if cfg.DATASET_NAME != 'cityscapes':
+        if cfg.DATASET_NAME == 'else':
+            train_imgs = \
+                np.array([imread(fn) for fn in train_images_list])
+
+        elif cfg.DATASET_NAME != 'cityscapes':
             train_imgs = \
                 np.array([
                     imresize(imread(str(fn))[:, img_size*offset:img_size*(offset+1), :],
